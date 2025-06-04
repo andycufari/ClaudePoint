@@ -38,7 +38,23 @@ claude mcp add claudepoint claudepoint
 #### For Claude Desktop (GUI Application):
 Add to your Claude Desktop configuration file:
 
-**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json
+### Advanced Configuration: Project-Specific Directories
+
+To use ClaudePoint with a specific project directory in Claude Desktop, you can set the `CLAUDEPOINT_PROJECT_DIR` environment variable:
+
+```json
+{
+  "mcpServers": {
+    "claudepoint": {
+      "command": "claudepoint",
+      "args": [],
+      "env": {
+        "CLAUDEPOINT_PROJECT_DIR": "/path/to/your/project"
+      }
+    }
+  }
+}`
 **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
 
 ```json
