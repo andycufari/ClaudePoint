@@ -7,13 +7,21 @@
  * GitHub: https://github.com/Andycufari/ClaudePoint
  */
 
-const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
-const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
-const { 
-  CallToolRequestSchema, 
-  ListToolsRequestSchema 
-} = require('@modelcontextprotocol/sdk/types.js');
+// Use dynamic imports for ES modules
+let Server, StdioServerTransport, CallToolRequestSchema, ListToolsRequestSchema;
 const CheckpointManager = require('./lib/checkpoint-manager.js');
+
+// Initialize ES module imports
+async function loadESModules() {
+  const serverModule = await import('@modelcontextprotocol/sdk/server/index.js');
+  const stdioModule = await import('@modelcontextprotocol/sdk/server/stdio.js');
+  const typesModule = await import('@modelcontextprotocol/sdk/types.js');
+  
+  Server = serverModule.Server;
+  StdioServerTransport = stdioModule.StdioServerTransport;
+  CallToolRequestSchema = typesModule.CallToolRequestSchema;
+  ListToolsRequestSchema = typesModule.ListToolsRequestSchema;
+}
 
 class ClaudePointMCPServer {
   constructor() {
@@ -487,11 +495,18 @@ class ClaudePointMCPServer {
   }
 }
 
-// Start the server
-const server = new ClaudePointMCPServer();
-server.start().catch(error => {
-  console.error('Failed to start server:', error);
-  process.exit(1);
-});
+// Start the server with async initialization
+async function main() {
+  try {
+    await loadESModules();
+    const server = new ClaudePointMCPServer();
+    await server.start();
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+main();
 
 module.exports = ClaudePointMCPServer;
