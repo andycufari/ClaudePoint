@@ -47,6 +47,9 @@ class CheckpointManager {
     const ig = ignore();
     const config = await this.loadConfig();
 
+    // Always ignore the .checkpoints directory
+    ig.add(['.checkpoints', '.checkpoints/']);
+
     // Add additional ignore patterns from config
     if (config.additionalIgnores && config.additionalIgnores.length > 0) {
       ig.add(config.additionalIgnores);
@@ -311,7 +314,7 @@ class CheckpointManager {
 
       return {
         success: true,
-        emergencyBackup: emergencyName,
+        emergencyBackup: backupResult.name,
         restored: checkpoint.name
       };
     } catch (error) {

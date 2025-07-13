@@ -209,6 +209,17 @@ describe('CheckpointManager', () => {
       expect(await checkpointManager.shouldIgnore(path.join(tempDir, 'temp.tmp'))).toBe(true);
       expect(await checkpointManager.shouldIgnore(path.join(tempDir, 'cache'))).toBe(true);
     });
+
+    test('should always ignore .checkpoints directory', async () => {
+      // .checkpoints should be ignored even without explicit configuration
+      await checkpointManager.ensureDirectories();
+      await fs.writeFile(path.join(tempDir, 'app.js'), 'app code');
+      await fs.writeFile(path.join(tempDir, '.checkpoints', 'config.json'), '{}');
+
+      expect(await checkpointManager.shouldIgnore(path.join(tempDir, 'app.js'))).toBe(false);
+      expect(await checkpointManager.shouldIgnore(path.join(tempDir, '.checkpoints'))).toBe(true);
+      expect(await checkpointManager.shouldIgnore(path.join(tempDir, '.checkpoints', 'config.json'))).toBe(true);
+    });
   });
 
   describe('Performance and Caching', () => {
@@ -408,6 +419,496 @@ describe('CheckpointManager', () => {
       
       // Results should be consistent regardless of how we reference the files
       expect(await checkpointManager.shouldIgnore(path.join(tempDir, 'src', 'temp'))).toBe(true);
+    });
+  });
+
+  describe('Configuration Management', () => {
+    test('should load default config when no config file exists', async () => {
+      const config = await checkpointManager.loadConfig();
+      
+      expect(config).toEqual({
+        maxCheckpoints: 10,
+        autoName: true,
+        additionalIgnores: [],
+        nameTemplate: 'checkpoint_{timestamp}'
+      });
+      
+      // Should create config file
+      const configData = await fs.readFile(checkpointManager.configFile, 'utf8');
+      const savedConfig = JSON.parse(configData);
+      expect(savedConfig).toEqual(config);
+    });
+
+    test('should load existing config and merge with defaults', async () => {
+      await checkpointManager.ensureDirectories();
+      const customConfig = {
+        maxCheckpoints: 5,
+        additionalIgnores: ['*.tmp', 'cache/']
+      };
+      await fs.writeFile(checkpointManager.configFile, JSON.stringify(customConfig, null, 2));
+
+      const config = await checkpointManager.loadConfig();
+      
+      expect(config).toEqual({
+        maxCheckpoints: 5,
+        autoName: true,
+        additionalIgnores: ['*.tmp', 'cache/'],
+        nameTemplate: 'checkpoint_{timestamp}'
+      });
+    });
+
+    test('should handle malformed config file gracefully', async () => {
+      await checkpointManager.ensureDirectories();
+      await fs.writeFile(checkpointManager.configFile, 'invalid json {');
+
+      const config = await checkpointManager.loadConfig();
+      
+      // Should fall back to defaults
+      expect(config).toEqual({
+        maxCheckpoints: 10,
+        autoName: true,
+        additionalIgnores: [],
+        nameTemplate: 'checkpoint_{timestamp}'
+      });
+    });
+  });
+
+  describe('Directory Management', () => {
+    test('should ensure directories exist', async () => {
+      // Directories shouldn't exist initially
+      await expect(fs.access(checkpointManager.checkpointDir)).rejects.toThrow();
+      await expect(fs.access(checkpointManager.snapshotsDir)).rejects.toThrow();
+
+      await checkpointManager.ensureDirectories();
+
+      // Directories should exist now
+      await expect(fs.access(checkpointManager.checkpointDir)).resolves.not.toThrow();
+      await expect(fs.access(checkpointManager.snapshotsDir)).resolves.not.toThrow();
+    });
+
+    test('should not fail when directories already exist', async () => {
+      await checkpointManager.ensureDirectories();
+      await checkpointManager.ensureDirectories(); // Second call should not fail
+      
+      await expect(fs.access(checkpointManager.checkpointDir)).resolves.not.toThrow();
+      await expect(fs.access(checkpointManager.snapshotsDir)).resolves.not.toThrow();
+    });
+  });
+
+  describe('Checkpoint Naming', () => {
+    test('should generate name with custom name', () => {
+      const name = checkpointManager.generateCheckpointName('my-checkpoint');
+      expect(name).toMatch(/^my-checkpoint_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}$/);
+    });
+
+    test('should generate name from description', () => {
+      const name = checkpointManager.generateCheckpointName(null, 'Feature: Add user authentication system');
+      expect(name).toMatch(/^feature_add_user_authenticatio_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}$/);
+    });
+
+    test('should generate default name when no custom name or description', () => {
+      const name = checkpointManager.generateCheckpointName();
+      expect(name).toMatch(/^checkpoint_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}$/);
+    });
+
+    test('should clean description properly', () => {
+      const name = checkpointManager.generateCheckpointName(null, 'Test!@#$%^&*()[]{}|\\:";\'<>?,./`~');
+      expect(name).toMatch(/^test_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}$/);
+    });
+
+    test('should truncate long descriptions', () => {
+      const longDesc = 'This is a very long description that should be truncated to 30 characters max';
+      const name = checkpointManager.generateCheckpointName(null, longDesc);
+      expect(name).toMatch(/^this_is_a_very_long_descriptio_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}$/);
+    });
+  });
+
+  describe('Checkpoint Creation', () => {
+    test('should create checkpoint successfully', async () => {
+      // Create some test files
+      await fs.writeFile(path.join(tempDir, 'app.js'), 'console.log("hello");');
+      await fs.writeFile(path.join(tempDir, 'README.md'), '# Test Project');
+      await fs.mkdir(path.join(tempDir, 'src'));
+      await fs.writeFile(path.join(tempDir, 'src', 'index.js'), 'module.exports = {};');
+
+      const result = await checkpointManager.create('test-checkpoint', 'Test checkpoint creation');
+
+      expect(result.success).toBe(true);
+      expect(result.name).toMatch(/^test-checkpoint_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}$/);
+      expect(result.description).toBe('Test checkpoint creation');
+      expect(result.fileCount).toBe(3); // .checkpoints directory is now ignored
+      expect(result.size).toMatch(/^\d+\.\d+[KMGT]?B$/);
+
+      // Verify checkpoint files exist
+      const checkpointPath = path.join(checkpointManager.snapshotsDir, result.name);
+      await expect(fs.access(checkpointPath)).resolves.not.toThrow();
+      await expect(fs.access(path.join(checkpointPath, 'manifest.json'))).resolves.not.toThrow();
+      await expect(fs.access(path.join(checkpointPath, 'files.tar.gz'))).resolves.not.toThrow();
+
+      // Verify manifest content
+      const manifestData = await fs.readFile(path.join(checkpointPath, 'manifest.json'), 'utf8');
+      const manifest = JSON.parse(manifestData);
+      expect(manifest.name).toBe(result.name);
+      expect(manifest.description).toBe('Test checkpoint creation');
+      expect(manifest.files).toContain('app.js');
+      expect(manifest.files).toContain('README.md');
+      expect(manifest.files).toContain('src/index.js');
+      expect(manifest.files).not.toContain('.checkpoints/config.json'); // Should be ignored
+      expect(manifest.fileCount).toBe(3);
+    });
+
+    test('should fail when no files found', async () => {
+      // Use a gitignore that ignores everything to simulate no files
+      await fs.writeFile(path.join(tempDir, '.gitignore'), '*\n');
+      await fs.writeFile(path.join(tempDir, 'test.txt'), 'this will be ignored');
+      
+      const result = await checkpointManager.create('empty-checkpoint', 'Empty test');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('No files found to checkpoint');
+    });
+
+    test('should respect ignore patterns during creation', async () => {
+      await fs.writeFile(path.join(tempDir, '.gitignore'), '*.log\nnode_modules/\n');
+      await fs.writeFile(path.join(tempDir, 'app.js'), 'app code');
+      await fs.writeFile(path.join(tempDir, 'debug.log'), 'log data');
+      await fs.mkdir(path.join(tempDir, 'node_modules'));
+      await fs.writeFile(path.join(tempDir, 'node_modules', 'lib.js'), 'library');
+
+      const result = await checkpointManager.create('filtered-checkpoint', 'Test filtering');
+
+      expect(result.success).toBe(true);
+      expect(result.fileCount).toBe(2); // app.js and .gitignore only (.checkpoints ignored)
+
+      // Verify manifest
+      const checkpointPath = path.join(checkpointManager.snapshotsDir, result.name);
+      const manifestData = await fs.readFile(path.join(checkpointPath, 'manifest.json'), 'utf8');
+      const manifest = JSON.parse(manifestData);
+      expect(manifest.files).toContain('app.js');
+      expect(manifest.files).toContain('.gitignore');
+      expect(manifest.files).not.toContain('.checkpoints/config.json'); // Should be ignored
+      expect(manifest.files).not.toContain('debug.log');
+      expect(manifest.files).not.toContain('node_modules/lib.js');
+    });
+  });
+
+  describe('Checkpoint Listing and Management', () => {
+    test('should list checkpoints in reverse chronological order', async () => {
+      await fs.writeFile(path.join(tempDir, 'app.js'), 'app code');
+
+      // Create multiple checkpoints with small delays
+      const checkpoint1 = await checkpointManager.create('first', 'First checkpoint');
+      await new Promise(resolve => setTimeout(resolve, 10)); // Small delay
+      const checkpoint2 = await checkpointManager.create('second', 'Second checkpoint');
+      await new Promise(resolve => setTimeout(resolve, 10)); // Small delay
+      const checkpoint3 = await checkpointManager.create('third', 'Third checkpoint');
+
+      const checkpoints = await checkpointManager.getCheckpoints();
+
+      expect(checkpoints).toHaveLength(3);
+      expect(checkpoints[0].name).toBe(checkpoint3.name); // Most recent first
+      expect(checkpoints[1].name).toBe(checkpoint2.name);
+      expect(checkpoints[2].name).toBe(checkpoint1.name);
+    });
+
+    test('should cleanup old checkpoints when max exceeded', async () => {
+      await fs.writeFile(path.join(tempDir, 'app.js'), 'app code');
+      
+      // Set max checkpoints to 2
+      await checkpointManager.ensureDirectories();
+      const config = { maxCheckpoints: 2, autoName: true, additionalIgnores: [], nameTemplate: 'checkpoint_{timestamp}' };
+      await fs.writeFile(checkpointManager.configFile, JSON.stringify(config, null, 2));
+
+      // Create 3 checkpoints
+      await checkpointManager.create('first', 'First');
+      await new Promise(resolve => setTimeout(resolve, 10));
+      await checkpointManager.create('second', 'Second');
+      await new Promise(resolve => setTimeout(resolve, 10));
+      await checkpointManager.create('third', 'Third'); // This should trigger cleanup
+
+      const checkpoints = await checkpointManager.getCheckpoints();
+      
+      expect(checkpoints).toHaveLength(2);
+      expect(checkpoints[0].description).toBe('Third');
+      expect(checkpoints[1].description).toBe('Second');
+    });
+
+    test('should handle empty snapshots directory', async () => {
+      const checkpoints = await checkpointManager.getCheckpoints();
+      expect(checkpoints).toEqual([]);
+    });
+
+    test('should skip invalid checkpoint directories', async () => {
+      await checkpointManager.ensureDirectories();
+      
+      // Create a valid checkpoint
+      await fs.writeFile(path.join(tempDir, 'app.js'), 'app code');
+      await checkpointManager.create('valid', 'Valid checkpoint');
+
+      // Create invalid directory (no manifest)
+      await fs.mkdir(path.join(checkpointManager.snapshotsDir, 'invalid-checkpoint'));
+      
+      // Create directory with invalid manifest
+      const invalidPath = path.join(checkpointManager.snapshotsDir, 'invalid-manifest');
+      await fs.mkdir(invalidPath);
+      await fs.writeFile(path.join(invalidPath, 'manifest.json'), 'invalid json {');
+
+      const checkpoints = await checkpointManager.getCheckpoints();
+      
+      expect(checkpoints).toHaveLength(1);
+      expect(checkpoints[0].description).toBe('Valid checkpoint');
+    });
+  });
+
+  describe('Utility Functions', () => {
+    test('should format file sizes correctly', () => {
+      expect(checkpointManager.formatSize(512)).toBe('512.0B');
+      expect(checkpointManager.formatSize(1024)).toBe('1.0KB');
+      expect(checkpointManager.formatSize(1536)).toBe('1.5KB');
+      expect(checkpointManager.formatSize(1024 * 1024)).toBe('1.0MB');
+      expect(checkpointManager.formatSize(1024 * 1024 * 1024)).toBe('1.0GB');
+      expect(checkpointManager.formatSize(1024 * 1024 * 1024 * 1024)).toBe('1024.0GB');
+    });
+
+    test('should cleanup empty directories', async () => {
+      // Create nested directory structure
+      await fs.mkdir(path.join(tempDir, 'deep', 'nested', 'empty'), { recursive: true });
+      await fs.mkdir(path.join(tempDir, 'another', 'path'), { recursive: true });
+      await fs.writeFile(path.join(tempDir, 'another', 'file.txt'), 'content'); // Not empty
+
+      // Verify directories exist
+      await expect(fs.access(path.join(tempDir, 'deep', 'nested', 'empty'))).resolves.not.toThrow();
+      await expect(fs.access(path.join(tempDir, 'another', 'path'))).resolves.not.toThrow();
+
+      await checkpointManager.cleanupEmptyDirectories();
+
+      // Empty directories should be removed
+      await expect(fs.access(path.join(tempDir, 'deep'))).rejects.toThrow();
+      
+      // Non-empty directories should remain
+      await expect(fs.access(path.join(tempDir, 'another'))).resolves.not.toThrow();
+      await expect(fs.access(path.join(tempDir, 'another', 'file.txt'))).resolves.not.toThrow();
+    });
+  });
+
+  describe('Changelog Management', () => {
+    test('should log to changelog', async () => {
+      await checkpointManager.ensureDirectories();
+      await checkpointManager.logToChangelog('TEST_ACTION', 'Test description', 'Test details');
+
+      const changelog = await checkpointManager.getChangelog();
+      
+      expect(changelog).toHaveLength(1);
+      expect(changelog[0].action).toBe('TEST_ACTION');
+      expect(changelog[0].description).toBe('Test description');
+      expect(changelog[0].details).toBe('Test details');
+      expect(changelog[0].timestamp).toBeDefined();
+    });
+
+    test('should maintain changelog order (newest first)', async () => {
+      await checkpointManager.ensureDirectories();
+      await checkpointManager.logToChangelog('FIRST', 'First action');
+      await new Promise(resolve => setTimeout(resolve, 10));
+      await checkpointManager.logToChangelog('SECOND', 'Second action');
+      await new Promise(resolve => setTimeout(resolve, 10));
+      await checkpointManager.logToChangelog('THIRD', 'Third action');
+
+      const changelog = await checkpointManager.getChangelog();
+      
+      expect(changelog).toHaveLength(3);
+      expect(changelog[0].action).toBe('THIRD'); // Most recent first
+      expect(changelog[1].action).toBe('SECOND');
+      expect(changelog[2].action).toBe('FIRST');
+    });
+
+    test('should limit changelog to 50 entries', async () => {
+      await checkpointManager.ensureDirectories();
+      // Add 52 entries
+      for (let i = 0; i < 52; i++) {
+        await checkpointManager.logToChangelog('ACTION', `Entry ${i}`);
+      }
+
+      const changelog = await checkpointManager.getChangelog();
+      
+      expect(changelog).toHaveLength(50);
+      expect(changelog[0].description).toBe('Entry 51'); // Most recent
+      expect(changelog[49].description).toBe('Entry 2'); // 50th most recent
+    });
+
+    test('should handle empty changelog', async () => {
+      const changelog = await checkpointManager.getChangelog();
+      expect(changelog).toEqual([]);
+    });
+
+    test('should handle malformed changelog file', async () => {
+      await checkpointManager.ensureDirectories();
+      await fs.writeFile(checkpointManager.changelogFile, 'invalid json {');
+
+      const changelog = await checkpointManager.getChangelog();
+      expect(changelog).toEqual([]);
+    });
+
+    test('should continue operation when changelog fails', async () => {
+      // Make changelog file unwritable by creating it as a directory
+      await checkpointManager.ensureDirectories();
+      await fs.mkdir(checkpointManager.changelogFile);
+
+      // Should not throw, should continue silently
+      await expect(checkpointManager.logToChangelog('TEST', 'Test')).resolves.not.toThrow();
+    });
+  });
+
+  describe('Project Setup', () => {
+    test('should setup project successfully', async () => {
+      await fs.writeFile(path.join(tempDir, 'app.js'), 'app code');
+
+      const result = await checkpointManager.setup();
+
+      expect(result.success).toBe(true);
+      expect(result.initialCheckpoint).toBeDefined();
+
+      // Should create directories
+      await expect(fs.access(checkpointManager.checkpointDir)).resolves.not.toThrow();
+      await expect(fs.access(checkpointManager.snapshotsDir)).resolves.not.toThrow();
+
+      // Should create config file
+      await expect(fs.access(checkpointManager.configFile)).resolves.not.toThrow();
+
+      // Should update .gitignore
+      const gitignoreContent = await fs.readFile(path.join(tempDir, '.gitignore'), 'utf8');
+      expect(gitignoreContent).toContain('.checkpoints/');
+      expect(gitignoreContent).toContain('# ClaudPoint checkpoint system');
+
+      // Should create initial checkpoint
+      const checkpoints = await checkpointManager.getCheckpoints();
+      expect(checkpoints).toHaveLength(1);
+      expect(checkpoints[0].name).toMatch(/^initial_/);
+    });
+
+    test('should handle setup when no files exist', async () => {
+      // Make sure there are absolutely no files by setting up an ignore pattern for everything
+      await fs.writeFile(path.join(tempDir, '.gitignore'), '*\n');
+      
+      const result = await checkpointManager.setup();
+
+      expect(result.success).toBe(true);
+      expect(result.initialCheckpoint).toBeNull();
+
+      // Should still create directories and config
+      await expect(fs.access(checkpointManager.checkpointDir)).resolves.not.toThrow();
+      await expect(fs.access(checkpointManager.configFile)).resolves.not.toThrow();
+    });
+
+    test('should not duplicate .gitignore entries', async () => {
+      await fs.writeFile(path.join(tempDir, '.gitignore'), 'node_modules/\n.checkpoints/\n*.log\n');
+      await fs.writeFile(path.join(tempDir, 'app.js'), 'app code');
+
+      await checkpointManager.setup();
+
+      const gitignoreContent = await fs.readFile(path.join(tempDir, '.gitignore'), 'utf8');
+      const matches = gitignoreContent.match(/\.checkpoints\//g);
+      expect(matches).toHaveLength(1); // Should only appear once
+    });
+
+    test('should handle .gitignore update errors gracefully', async () => {
+      // Make .gitignore unwritable by creating it as a directory
+      await fs.mkdir(path.join(tempDir, '.gitignore'));
+      await fs.writeFile(path.join(tempDir, 'app.js'), 'app code');
+
+      const result = await checkpointManager.setup();
+
+      // Should still succeed even if .gitignore update fails
+      expect(result.success).toBe(true);
+    });
+
+    test('should handle setup errors gracefully', async () => {
+      // Create a scenario that would cause setup to fail
+      const invalidCheckpointManager = new CheckpointManager('/invalid/path/that/does/not/exist');
+      
+      const result = await invalidCheckpointManager.setup();
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBeDefined();
+    });
+  });
+
+  describe('Checkpoint Restoration', () => {
+    let checkpointName;
+
+    beforeEach(async () => {
+      // Create initial files and checkpoint
+      await fs.writeFile(path.join(tempDir, 'original.js'), 'original content');
+      await fs.writeFile(path.join(tempDir, 'README.md'), '# Original README');
+      
+      const result = await checkpointManager.create('test-restore', 'Checkpoint for restore testing');
+      checkpointName = result.name;
+      
+      // Modify files after checkpoint
+      await fs.writeFile(path.join(tempDir, 'original.js'), 'modified content');
+      await fs.writeFile(path.join(tempDir, 'new-file.js'), 'new file content');
+      await fs.unlink(path.join(tempDir, 'README.md'));
+    });
+
+    test('should perform dry run restore', async () => {
+      const result = await checkpointManager.restore(checkpointName, true);
+
+      expect(result.success).toBe(true);
+      expect(result.dryRun).toBe(true);
+      expect(result.checkpoint).toBeDefined();
+      expect(result.checkpoint.name).toBe(checkpointName);
+
+      // Files should not be modified in dry run
+      const modifiedContent = await fs.readFile(path.join(tempDir, 'original.js'), 'utf8');
+      expect(modifiedContent).toBe('modified content');
+    });
+
+    test('should restore checkpoint successfully', async () => {
+      const result = await checkpointManager.restore(checkpointName);
+
+      expect(result.success).toBe(true);
+      expect(result.emergencyBackup).toBeDefined();
+      expect(result.restored).toBe(checkpointName);
+
+      // Original file should be restored
+      const restoredContent = await fs.readFile(path.join(tempDir, 'original.js'), 'utf8');
+      expect(restoredContent).toBe('original content');
+
+      // README should be restored
+      const readmeContent = await fs.readFile(path.join(tempDir, 'README.md'), 'utf8');
+      expect(readmeContent).toBe('# Original README');
+
+      // New file should be removed
+      await expect(fs.access(path.join(tempDir, 'new-file.js'))).rejects.toThrow();
+
+      // Emergency backup should be created
+      const checkpoints = await checkpointManager.getCheckpoints();
+      const emergencyBackup = checkpoints.find(cp => cp.name === result.emergencyBackup);
+      expect(emergencyBackup).toBeDefined();
+    });
+
+    test('should find checkpoint by partial name', async () => {
+      const result = await checkpointManager.restore('test-restore'); // Partial name
+
+      expect(result.success).toBe(true);
+      expect(result.restored).toBe(checkpointName);
+    });
+
+    test('should handle non-existent checkpoint', async () => {
+      const result = await checkpointManager.restore('non-existent-checkpoint');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Checkpoint not found');
+    });
+
+    test('should handle restore errors gracefully', async () => {
+      // Delete the checkpoint tar file to simulate corruption
+      const checkpointPath = path.join(checkpointManager.snapshotsDir, checkpointName);
+      await fs.unlink(path.join(checkpointPath, 'files.tar.gz'));
+
+      const result = await checkpointManager.restore(checkpointName);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBeDefined();
     });
   });
 });
