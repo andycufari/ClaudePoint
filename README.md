@@ -276,7 +276,7 @@ Auto-created `.checkpoints/config.json`:
 }
 ```
 
-ClaudePoint now relies entirely on your project's `.gitignore` file for ignore patterns, with optional `additionalIgnores` for custom exclusions. This provides full gitignore compatibility including negation patterns, nested directories, and complex syntax.
+ClaudePoint relies entirely on your project's `.gitignore` file for ignore patterns, with optional `additionalIgnores` for custom exclusions. This provides full gitignore compatibility including negation patterns, nested directories, and complex syntax.
 
 ## 🧪 Testing & Quality Assurance
 
@@ -459,8 +459,7 @@ claudepoint restore "some-checkpoint" --dry-run
 | **Space Efficient** | ✅ Compressed | ✅ | ❌ |
 | **Development Timeline** | ✅ Rich History | ❌ Basic | ❌ |
 | **Gitignore Support** | ✅ Full Syntax | ✅ Basic | ❌ |
-| **Test Coverage** | ✅ 98%+ | ❌ | ❌ |
-| **Quality Assurance** | ✅ 51 Tests | ❌ | ❌ |
+
 
 ## 🤝 Contributing
 
