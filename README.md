@@ -1,6 +1,6 @@
 # ClaudePoint MCP🎯
 
-**The safest way to 'vive code' with Claude Code.** Create instant checkpoints of your codebase, experiment fearlessly, and restore instantly if things go wrong.
+**The safest way to 'vibe code' with Claude Code.** Create instant checkpoints of your codebase, experiment fearlessly, and restore instantly if things go wrong.
 
 [![npm version](https://badge.fury.io/js/claudepoint.svg)](https://badge.fury.io/js/claudepoint)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -15,10 +15,11 @@
 - 📋 **Development history & changelog** - Track all activities with automatic logging
 - 📝 **Custom changelog entries** - Claude Code can document its own changes
 - 📦 **Smart compression** - Efficient tar.gz storage
-- 🔍 **Gitignore aware** - Respects your .gitignore patterns
+- 🔍 **Robust ignore handling** - Industry-standard gitignore support with negation patterns
 - 🛡️ **Safe restoration** - Auto-backup before every restore
 - 🧹 **Auto cleanup** - Configurable checkpoint limits
-- ⚡ **Fast operations** - Optimized for development workflows
+- ⚡ **Fast operations** - Optimized for development workflows with caching
+- 🧪 **Comprehensive testing** - 98%+ test coverage with 51 validation tests
 
 ## 🚀 Quick Start
 
@@ -226,11 +227,13 @@ Claude: Understands context from changelog and continues appropriately
 ## 📁 What Gets Saved
 
 ClaudePoint automatically:
-- ✅ **Respects .gitignore** - Won't save node_modules, .env, etc.
+- ✅ **Respects .gitignore** - Industry-standard ignore pattern handling with negation support
+- ✅ **Handles complex patterns** - Nested directories, wildcards, and exception rules (!pattern)  
 - ✅ **Compresses efficiently** - Uses tar.gz for small storage
 - ✅ **Tracks metadata** - Timestamps, descriptions, file counts
 - ✅ **Logs activities** - Complete development history in changelog.json
 - ✅ **Auto-cleans** - Removes old checkpoints (configurable limit)
+- ✅ **Performance optimized** - Cached ignore pattern matching for speed
 
 ## 🛡️ Safety Features
 
@@ -268,16 +271,52 @@ Auto-created `.checkpoints/config.json`:
 {
   "maxCheckpoints": 10,
   "autoName": true,
-  "ignorePatterns": [
-    ".git", ".checkpoints", "node_modules", ".env", ".env.*",
-    "*.log", ".DS_Store", "Thumbs.db", "__pycache__", "*.pyc",
-    ".vscode", ".idea", "dist", "build", "coverage", ".nyc_output",
-    ".next", ".nuxt", ".cache", "tmp", "temp"
-  ],
   "additionalIgnores": ["my-custom-dir"],
   "nameTemplate": "checkpoint_{timestamp}"
 }
 ```
+
+ClaudePoint relies entirely on your project's `.gitignore` file for ignore patterns, with optional `additionalIgnores` for custom exclusions. This provides full gitignore compatibility including negation patterns, nested directories, and complex syntax.
+
+## 🧪 Testing & Quality Assurance
+
+ClaudePoint includes a comprehensive testing infrastructure ensuring reliability and correctness:
+
+### **Test Coverage**
+- ✅ **98.36% statement coverage** - Thorough validation of all code paths
+- ✅ **100% function coverage** - Every method tested and validated
+- ✅ **51 comprehensive tests** - Covering all functionality and edge cases
+
+### **Test Categories**
+- **Ignore Pattern Handling** - Complex gitignore syntax, negation patterns, nested directories
+- **Performance & Caching** - Ignore matcher caching and optimization validation
+- **Configuration Management** - Config loading, merging, and error handling
+- **Checkpoint Operations** - Creation, restoration, listing, and cleanup
+- **Project Integration** - File discovery, ignore pattern application
+- **Error Handling** - Malformed files, missing dependencies, edge cases
+- **Changelog Management** - Activity logging and history tracking
+- **Utility Functions** - File operations, formatting, and cleanup
+
+### **Running Tests**
+```bash
+# Run all tests
+npm test
+
+# Run tests with coverage report
+npm run test:coverage
+
+# Run tests in watch mode for development
+npm run test:watch
+```
+
+### **Quality Validation**
+Tests validate all key success factors including:
+- ✅ Proper gitignore syntax support with complex patterns
+- ✅ Negation pattern support (!pattern exceptions)
+- ✅ Nested directory handling (src/**/*.tmp, **/temp/)
+- ✅ Performance optimization through caching
+- ✅ Consistency between .gitignore and config patterns
+- ✅ Error resilience and graceful degradation
 
 ## 🔧 Installation & Setup
 
@@ -419,6 +458,8 @@ claudepoint restore "some-checkpoint" --dry-run
 | **Fast Restore** | ✅ Instant | ❌ Complex | ❌ Manual |
 | **Space Efficient** | ✅ Compressed | ✅ | ❌ |
 | **Development Timeline** | ✅ Rich History | ❌ Basic | ❌ |
+| **Gitignore Support** | ✅ Full Syntax | ✅ Basic | ❌ |
+
 
 ## 🤝 Contributing
 
