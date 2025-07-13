@@ -10,7 +10,9 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node src/index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "keywords": [
     "claude",
@@ -37,10 +39,14 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^0.5.0",
-    "commander": "^11.1.0",
     "chalk": "^4.1.2",
-    "ora": "^5.4.1",
+    "commander": "^11.1.0",
+    "ignore": "^7.0.5",
     "inquirer": "^8.2.6",
+    "ora": "^5.4.1",
     "tar": "^6.2.0"
+  },
+  "devDependencies": {
+    "jest": "^30.0.4"
   }
 }
