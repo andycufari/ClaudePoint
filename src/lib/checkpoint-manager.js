@@ -22,12 +22,6 @@ class CheckpointManager {
     const defaultConfig = {
       maxCheckpoints: 10,
       autoName: true,
-      ignorePatterns: [
-        '.git', '.checkpoints', 'node_modules', '.env', '.env.*',
-        '*.log', '.DS_Store', 'Thumbs.db', '__pycache__', '*.pyc',
-        '.vscode', '.idea', 'dist', 'build', 'coverage', '.nyc_output',
-        '.next', '.nuxt', '.cache', 'tmp', 'temp', 'vendor'
-      ],
       additionalIgnores: [],
       nameTemplate: 'checkpoint_{timestamp}'
     };
@@ -53,9 +47,10 @@ class CheckpointManager {
     const ig = ignore();
     const config = await this.loadConfig();
 
-    // Add config ignore patterns
-    const allPatterns = [...config.ignorePatterns, ...config.additionalIgnores];
-    ig.add(allPatterns);
+    // Add additional ignore patterns from config
+    if (config.additionalIgnores && config.additionalIgnores.length > 0) {
+      ig.add(config.additionalIgnores);
+    }
 
     // Add .gitignore patterns if file exists
     try {
@@ -63,7 +58,7 @@ class CheckpointManager {
       const gitignoreContent = await fs.readFile(gitignorePath, 'utf8');
       ig.add(gitignoreContent);
     } catch (error) {
-      // No gitignore file, continue with config patterns only
+      // No gitignore file, continue with additional patterns only
     }
 
     this._ignoreMatcher = ig;
