@@ -7,30 +7,37 @@
  * GitHub: https://github.com/Andycufari/ClaudePoint
  */
 
-const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
-const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
-const { 
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { 
   CallToolRequestSchema, 
   ListToolsRequestSchema 
-} = require('@modelcontextprotocol/sdk/types.js');
-const CheckpointManager = require('./lib/checkpoint-manager.js');
+} from '@modelcontextprotocol/sdk/types.js';
+import CheckpointManager from './lib/checkpoint-manager.js';
+import { initializeSlashCommands } from './lib/slash-commands.js';
 
 class ClaudePointMCPServer {
   constructor() {
-    this.server = new Server(
-      {
-        name: 'claudepoint',
-        version: '1.1.1',
-      },
-      {
-        capabilities: {
-          tools: {},
+    try {
+      this.server = new Server(
+        {
+          name: 'claudepoint',
+          version: '1.1.2',
         },
-      }
-    );
+        {
+          capabilities: {
+            tools: {},
+          },
+        }
+      );
 
-    this.manager = new CheckpointManager();
-    this.setupToolHandlers();
+      this.manager = new CheckpointManager();
+      this.setupToolHandlers();
+    } catch (error) {
+      console.error('Failed to initialize ClaudePoint MCP server:', error);
+      console.error('Error details:', error.stack);
+      throw error;
+    }
   }
 
   setupToolHandlers() {
@@ -120,6 +127,14 @@ class ClaudePointMCPServer {
               },
               required: ['description']
             }
+          },
+          {
+            name: 'init_slash_commands',
+            description: 'Initialize Claude Code slash commands for ClaudePoint (creates /create-checkpoint, /restore-checkpoint, /list-checkpoints, /checkpoint-status)',
+            inputSchema: {
+              type: 'object',
+              properties: {}
+            }
           }
         ]
       };
@@ -148,6 +163,9 @@ class ClaudePointMCPServer {
           
           case 'set_changelog':
             return await this.handleSetChangelog(args);
+          
+          case 'init_slash_commands':
+            return await this.handleInitSlashCommands(args);
           
           default:
             throw new Error(`Unknown tool: ${name}`);
@@ -428,6 +446,54 @@ class ClaudePointMCPServer {
     }
   }
 
+  async handleInitSlashCommands(args) {
+    try {
+      const result = await initializeSlashCommands();
+      
+      if (result.success) {
+        let output = '🚀 ClaudePoint slash commands initialized!\n\n';
+        output += '✅ Created .claude/commands directory\n';
+        output += '✅ Added /create-checkpoint command\n';
+        output += '✅ Added /restore-checkpoint command\n';
+        output += '✅ Added /list-checkpoints command\n';
+        output += '✅ Added /checkpoint-status command\n';
+        output += '\n💡 Available slash commands:\n';
+        output += '  • /create-checkpoint - Create a new checkpoint\n';
+        output += '  • /restore-checkpoint - Restore with interactive selection\n';
+        output += '  • /list-checkpoints - List all checkpoints\n';
+        output += '  • /checkpoint-status - Show current status\n';
+        output += '\n🎯 Type / in Claude Code to see and use these commands!';
+        
+        return {
+          content: [
+            {
+              type: 'text',
+              text: output
+            }
+          ]
+        };
+      } else {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `❌ Failed to initialize slash commands: ${result.error}`
+            }
+          ]
+        };
+      }
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `❌ Error initializing slash commands: ${error.message}`
+          }
+        ]
+      };
+    }
+  }
+
   async handleSetup(args) {
     try {
       const result = await this.manager.setup();
@@ -480,10 +546,28 @@ class ClaudePointMCPServer {
   }
 
   async start() {
-    const transport = new StdioServerTransport();
-    await this.server.connect(transport);
-    console.error('ClaudePoint MCP server running on stdio');
-    console.error('Available tools: setup_claudepoint, create_checkpoint, list_checkpoints, restore_checkpoint, get_changelog, set_changelog');
+    try {
+      const transport = new StdioServerTransport();
+      await this.server.connect(transport);
+      console.error('ClaudePoint MCP server running on stdio');
+      console.error('Available tools: setup_claudepoint, create_checkpoint, list_checkpoints, restore_checkpoint, get_changelog, set_changelog, init_slash_commands');
+      
+      // Keep the process alive
+      process.on('SIGINT', () => {
+        console.error('MCP server shutting down...');
+        process.exit(0);
+      });
+      
+      process.on('SIGTERM', () => {
+        console.error('MCP server shutting down...');
+        process.exit(0);
+      });
+      
+    } catch (error) {
+      console.error('Failed to start MCP server:', error);
+      console.error('Error details:', error.stack);
+      process.exit(1);
+    }
   }
 }
 
@@ -491,7 +575,21 @@ class ClaudePointMCPServer {
 const server = new ClaudePointMCPServer();
 server.start().catch(error => {
   console.error('Failed to start server:', error);
+  console.error('Error stack:', error.stack);
   process.exit(1);
 });
 
-module.exports = ClaudePointMCPServer;
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  // Don't exit the process for unhandled rejections in MCP server
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  console.error('Stack:', error.stack);
+  process.exit(1);
+});
+
+export default ClaudePointMCPServer;

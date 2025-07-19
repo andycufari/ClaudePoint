@@ -70,6 +70,14 @@ Claude will automatically use ClaudePoint tools!
 
 Once configured, you can naturally tell Claude:
 
+### **Using Slash Commands (Fastest!):**
+```
+/create-checkpoint working-auth Everything works perfectly here
+/list-checkpoints
+/restore-checkpoint
+/checkpoint-status
+```
+
 ### **Project Setup:**
 ```
 "Setup checkpoints for this project and show me what we've worked on before"
@@ -131,7 +139,41 @@ claudepoint log "Fixed authentication bug" --details "Resolved OAuth token expir
 # Restore checkpoint
 claudepoint restore "before-major" --dry-run
 claudepoint restore "before-major"
+
+# Initialize slash commands for Claude Code
+claudepoint init-commands
 ```
+
+## 🚀 Slash Commands (NEW!)
+
+ClaudePoint now supports Claude Code slash commands for faster operations! These commands appear in Claude Code when you type `/`.
+
+### Setup Slash Commands
+
+```bash
+# During initial setup
+claudepoint setup
+
+# Or add to existing project
+claudepoint init-commands
+```
+
+### Available Slash Commands
+
+- **`/create-checkpoint`** - Create a checkpoint with optional name and description
+  - Example: `/create-checkpoint auth-working Authentication system complete`
+  
+- **`/restore-checkpoint`** - Interactive checkpoint restoration
+  - Shows numbered list of checkpoints
+  - Waits for your selection (by number or name)
+  
+- **`/list-checkpoints`** - Quick view of all checkpoints
+  
+- **`/checkpoint-status`** - Current status and recent activity
+
+### How It Works
+
+The slash commands are simple markdown files in `.claude/commands/` that guide Claude to use the appropriate ClaudePoint MCP tools. You can customize them after generation to fit your workflow!
 
 ## 🛠️ MCP Tools (For Claude)
 
@@ -143,6 +185,7 @@ When Claude has ClaudePoint configured, it can use:
 - **`restore_checkpoint`** - Restore previous state (with emergency backup)
 - **`get_changelog`** - View development history and session activities
 - **`set_changelog`** - Add custom entries to development history
+- **`init_slash_commands`** - Initialize Claude Code slash commands for the project
 
 ## 📋 Development History & Session Continuity
 

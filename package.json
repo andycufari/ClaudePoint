@@ -1,11 +1,12 @@
 {
   "name": "claudepoint",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "The safest way to experiment with Claude Code. Create instant checkpoints, experiment fearlessly, restore instantly.",
   "main": "bin/claudepoint.js",
   "bin": {
     "claudepoint": "./bin/claudepoint.js"
   },
+  "type": "module",
   "preferGlobal": true,
   "scripts": {
     "start": "node src/index.js",

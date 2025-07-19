@@ -3,16 +3,17 @@
  * Command line interface for checkpoint management
  */
 
-const { program } = require('commander');
-const CheckpointManager = require('./lib/checkpoint-manager');
-const chalk = require('chalk');
-const ora = require('ora');
-const inquirer = require('inquirer');
+import { program } from 'commander';
+import CheckpointManager from './lib/checkpoint-manager.js';
+import chalk from 'chalk';
+import ora from 'ora';
+import inquirer from 'inquirer';
+import { initializeSlashCommands } from './lib/slash-commands.js';
 
 program
   .name('claudepoint')
   .description('The safest way to experiment with Claude Code')
-  .version('1.1.1');
+  .version('1.1.2');
 
 program
   .command('setup')
@@ -33,7 +34,22 @@ program
         if (result.initialCheckpoint) {
           console.log(chalk.green(`✅ Created initial checkpoint: ${result.initialCheckpoint}`));
         }
+
+        spinner.start('Creating Claude Code slash commands...');
+        await initializeSlashCommands();
+        spinner.succeed('Slash commands created!');
+        console.log(chalk.green('✅ Created .claude/commands directory'));
+        console.log(chalk.green('✅ Added /create-checkpoint command'));
+        console.log(chalk.green('✅ Added /restore-checkpoint command'));
+        console.log(chalk.green('✅ Added /list-checkpoints command'));
+        console.log(chalk.green('✅ Added /checkpoint-status command'));
         
+        console.log(chalk.blue('\n🚀 Claude Code slash commands:'));
+        console.log('  /create-checkpoint - Create a new checkpoint');
+        console.log('  /restore-checkpoint - Restore with interactive selection');
+        console.log('  /list-checkpoints - List all checkpoints');
+        console.log('  /checkpoint-status - Show current status');
+
         console.log(chalk.blue('\n📋 Quick commands:'));
         console.log('  claudepoint create --description "Your description"');
         console.log('  claudepoint list');
@@ -215,6 +231,35 @@ program
       console.log(chalk.green(`✅ Changelog entry added: ${description}`));
     } catch (error) {
       console.error(chalk.red('❌ Log failed:'), error.message);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('init-commands')
+  .description('Initialize Claude Code slash commands for ClaudePoint')
+  .action(async () => {
+    const spinner = ora('Creating Claude Code slash commands...').start();
+    
+    try {
+      await initializeSlashCommands();
+      spinner.succeed('Slash commands created successfully!');
+      console.log(chalk.green('✅ Created .claude/commands directory'));
+      console.log(chalk.green('✅ Added /create-checkpoint command'));
+      console.log(chalk.green('✅ Added /restore-checkpoint command'));
+      console.log(chalk.green('✅ Added /list-checkpoints command'));
+      console.log(chalk.green('✅ Added /checkpoint-status command'));
+      
+      console.log(chalk.blue('\n🚀 Available slash commands in Claude Code:'));
+      console.log('  /create-checkpoint - Create a new checkpoint');
+      console.log('  /restore-checkpoint - Restore with interactive selection');
+      console.log('  /list-checkpoints - List all checkpoints');
+      console.log('  /checkpoint-status - Show current status');
+      
+      console.log(chalk.yellow('\n💡 Tip: Type / in Claude Code to see available commands!'));
+    } catch (error) {
+      spinner.fail('Failed to create slash commands');
+      console.error(chalk.red('Error:'), error.message);
       process.exit(1);
     }
   });
