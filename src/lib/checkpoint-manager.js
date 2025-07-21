@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import tar from 'tar';
+const ignore = 'ignore';
 
 const { promises: fsPromises } = fs;
 
@@ -11,6 +12,7 @@ class CheckpointManager {
     this.snapshotsDir = path.join(this.checkpointDir, 'snapshots');
     this.configFile = path.join(this.checkpointDir, 'config.json');
     this.changelogFile = path.join(this.checkpointDir, 'changelog.json');
+    this._ignoreMatcher = null; // Cache for ignore matcher
   }
 
   async ensureDirectories() {
@@ -22,12 +24,6 @@ class CheckpointManager {
     const defaultConfig = {
       maxCheckpoints: 10,
       autoName: true,
-      ignorePatterns: [
-        '.git', '.checkpoints', 'node_modules', '.env', '.env.*',
-        '*.log', '.DS_Store', 'Thumbs.db', '__pycache__', '*.pyc',
-        '.vscode', '.idea', 'dist', 'build', 'coverage', '.nyc_output',
-        '.next', '.nuxt', '.cache', 'tmp', 'temp'
-      ],
       additionalIgnores: [],
       nameTemplate: 'checkpoint_{timestamp}'
     };
@@ -45,49 +41,40 @@ class CheckpointManager {
     }
   }
 
-  async shouldIgnore(filePath) {
-    const relativePath = path.relative(this.projectRoot, filePath);
+  async getIgnoreMatcher() {
+    if (this._ignoreMatcher) {
+      return this._ignoreMatcher;
+    }
+
+    const ig = ignore();
     const config = await this.loadConfig();
-    
-    // Check gitignore if it exists
+
+    // Always ignore the .checkpoints directory
+    ig.add(['.checkpoints', '.checkpoints/']);
+
+    // Add additional ignore patterns from config
+    if (config.additionalIgnores && config.additionalIgnores.length > 0) {
+      ig.add(config.additionalIgnores);
+    }
+
+    // Add .gitignore patterns if file exists
     try {
       const gitignorePath = path.join(this.projectRoot, '.gitignore');
-      const gitignoreContent = await fsPromises.readFile(gitignorePath, 'utf8');
-      const gitignorePatterns = gitignoreContent
-        .split('\n')
-        .map(line => line.trim())
-        .filter(line => line && !line.startsWith('#'));
-
-      for (const pattern of gitignorePatterns) {
-        if (this.matchesPattern(relativePath, pattern) || 
-            this.matchesPattern(path.basename(filePath), pattern)) {
-          return true;
-        }
-      }
+      const gitignoreContent = await fs.readFile(gitignorePath, 'utf8');
+      ig.add(gitignoreContent);
     } catch (error) {
-      // No gitignore file, continue
+      // No gitignore file, continue with additional patterns only
     }
 
-    // Check configured ignore patterns
-    const allPatterns = [...config.ignorePatterns, ...config.additionalIgnores];
-    for (const pattern of allPatterns) {
-      if (this.matchesPattern(relativePath, pattern) || 
-          this.matchesPattern(path.basename(filePath), pattern)) {
-        return true;
-      }
-    }
-
-    return false;
+    this._ignoreMatcher = ig;
+    return this._ignoreMatcher;
   }
 
-  matchesPattern(str, pattern) {
-    // Simple glob pattern matching
-    const regexPattern = pattern
-      .replace(/\./g, '\\.')
-      .replace(/\*/g, '.*')
-      .replace(/\?/g, '.');
-    const regex = new RegExp(`^${regexPattern}$`);
-    return regex.test(str);
+  async shouldIgnore(filePath) {
+    const relativePath = path.relative(this.projectRoot, filePath);
+    const ig = await this.getIgnoreMatcher();
+    
+    return ig.ignores(relativePath);
   }
 
   async getProjectFiles() {
@@ -329,7 +316,7 @@ class CheckpointManager {
 
       return {
         success: true,
-        emergencyBackup: emergencyName,
+        emergencyBackup: backupResult.name,
         restored: checkpoint.name
       };
     } catch (error) {
