@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/andycufari-claudepoint-badge.png)](https://mseep.ai/app/andycufari-claudepoint)
+
 # ClaudePoint 🚀
 
 **The ultimate hacking companion for Claude Code.** Deploy claudepoints, experiment fearlessly, time travel instantly.
